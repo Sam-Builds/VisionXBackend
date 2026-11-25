@@ -9,7 +9,7 @@ using UIBackend.Domain.Enums;
 
 namespace UIBackend.Infrastructure.C2pa;
 
-public class C2paSigningService : IC2paService
+public class C2paSigningService : IC2paVerificationProvider
 {
     private readonly ILogger<C2paSigningService> _logger;
     private readonly RSA _signingRsa;
@@ -50,10 +50,9 @@ public class C2paSigningService : IC2paService
             }
         }
 
-        // Generate self-signed Root / Signing certificate for development & standalone deployment
         _signingRsa = RSA.Create(2048);
         var req = new CertificateRequest(
-            $"CN=VisionX Authenticity Authority, O=VisionX, C=US",
+            "CN=VisionX Authenticity Authority, O=VisionX, C=US",
             _signingRsa,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
@@ -77,17 +76,18 @@ public class C2paSigningService : IC2paService
         string? location = null,
         CancellationToken cancellationToken = default)
     {
-        // 1. Calculate raw media hard binding hash
         using var sha256 = SHA256.Create();
-        var rawHashBytes = sha256.ComputeHash(mediaBytes);
-        var rawHashHex = Convert.ToHexStringLower(rawHashBytes);
+        var rawHashHex = Convert.ToHexStringLower(sha256.ComputeHash(mediaBytes));
 
-        // 2. Build C2PA Manifest structure
         var actionName = sourceType == SourceType.Camera ? "c2pa.created" : "c2pa.opened";
+        var digitalSourceType = sourceType == SourceType.Camera
+            ? "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+            : "http://cv.iptc.org/newscodes/digitalsourcetype/unknown";
+
         var manifestObj = new
         {
-            claim_generator = "VisionX Media Provenance Engine v1.0",
-            claim_generator_info = new { name = "VisionX", version = "1.0.0" },
+            claim_generator = "VisionX Media Provenance Engine v2.0",
+            claim_generator_info = new { name = "VisionX", version = "2.0.0" },
             title = fileName,
             format = mimeType,
             instance_id = $"urn:uuid:{Guid.NewGuid()}",
@@ -105,7 +105,8 @@ public class C2paSigningService : IC2paService
                             new
                             {
                                 action = actionName,
-                                softwareAgent = "VisionX Camera Engine 1.0",
+                                digitalSourceType = digitalSourceType,
+                                softwareAgent = "VisionX Camera Engine 2.0",
                                 when = DateTime.UtcNow.ToString("O"),
                                 parameters = new
                                 {
@@ -134,11 +135,9 @@ public class C2paSigningService : IC2paService
         var manifestJson = JsonSerializer.Serialize(manifestObj, new JsonSerializerOptions { WriteIndented = false });
         var manifestBytes = Encoding.UTF8.GetBytes(manifestJson);
 
-        // 3. Cryptographic Signature over manifest bytes
         var signatureBytes = _signingRsa.SignData(manifestBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var signatureHex = Convert.ToHexStringLower(signatureBytes);
 
-        // 4. Embed manifest into media stream
         var embeddedBytes = EmbedManifestInMedia(mediaBytes, mimeType, manifestJson, signatureHex);
 
         return Task.FromResult(new C2paManifestResult(
@@ -150,16 +149,17 @@ public class C2paSigningService : IC2paService
         ));
     }
 
-    public Task<C2paVerificationResult> VerifyMediaAsync(
+    public async Task<C2paVerificationResult> VerifyMediaAsync(
         byte[] mediaBytes,
         string fileName,
         string mimeType,
         CancellationToken cancellationToken = default)
     {
-        var extracted = ExtractManifestFromMedia(mediaBytes, mimeType);
-        if (extracted == null)
+        var detailed = await InspectDetailedProvenanceAsync(mediaBytes, fileName, mimeType, cancellationToken);
+
+        if (!detailed.ManifestPresent)
         {
-            return Task.FromResult(new C2paVerificationResult(
+            return new C2paVerificationResult(
                 Status: C2paStatus.NoCredentials,
                 HasManifest: false,
                 SignatureValid: false,
@@ -169,16 +169,105 @@ public class C2paSigningService : IC2paService
                 ManifestJson: null,
                 ClaimSummary: null,
                 Message: "No C2PA Content Credentials or JUMBF provenance metadata found in media."
+            );
+        }
+
+        C2paStatus status;
+        string message;
+
+        if (!detailed.StructureValid || !detailed.HardBindingValid)
+        {
+            status = C2paStatus.InvalidCredentials;
+            message = "Media payload does not match C2PA cryptographic hard-binding digest or manifest structure is invalid.";
+        }
+        else if (!detailed.SignatureValid || !detailed.SignerTrusted)
+        {
+            status = C2paStatus.UntrustedSigner;
+            message = "C2PA manifest signature could not be verified under VisionX trust policy.";
+        }
+        else if (detailed.RecordedActions.Any(a => a.Contains("c2pa.created", StringComparison.OrdinalIgnoreCase)) && !detailed.IsDerivative && !detailed.RecordsAiActions)
+        {
+            status = C2paStatus.VerifiedOriginal;
+            message = "Valid VisionX C2PA Content Credentials and exact hard-binding verified.";
+        }
+        else
+        {
+            status = C2paStatus.VerifiedProvenanceTransformed;
+            message = "C2PA provenance verified for edited/imported/derivative media.";
+        }
+
+        return new C2paVerificationResult(
+            Status: status,
+            HasManifest: true,
+            SignatureValid: detailed.SignatureValid,
+            HardBindingValid: detailed.HardBindingValid,
+            Issuer: detailed.SignerIdentity,
+            SignerThumbprint: detailed.SignerThumbprint,
+            ManifestJson: detailed.ManifestJson,
+            ClaimSummary: detailed.ClaimSummary,
+            Message: message
+        );
+    }
+
+    public Task<C2paDetailedInspectionResult> InspectDetailedProvenanceAsync(
+        byte[] mediaBytes,
+        string fileName,
+        string mimeType,
+        CancellationToken cancellationToken = default)
+    {
+        const string limitations = "C2PA provenance records the cryptographic history of a file and its declared assertions; it does not by itself prove the depicted real-world scene or rule out analog/pre-capture manipulation.";
+
+        var extracted = ExtractManifestFromMedia(mediaBytes, mimeType);
+        if (extracted == null)
+        {
+            // Also check for external standard JUMBF / OpenAI C2PA markers in container bytes
+            var externalInfo = DetectExternalC2paMarkers(mediaBytes);
+            if (externalInfo != null)
+            {
+                return Task.FromResult(new C2paDetailedInspectionResult(
+                    ManifestPresent: true,
+                    StructureValid: true,
+                    SignatureValid: false,
+                    SignerTrusted: false,
+                    SignerIdentity: externalInfo.Value.Issuer,
+                    SignerThumbprint: null,
+                    HardBindingValid: false,
+                    IsDerivative: true,
+                    RecordsAiActions: externalInfo.Value.RecordsAi,
+                    RecordedActions: externalInfo.Value.Actions,
+                    IngredientRelationships: Array.Empty<string>(),
+                    ManifestJson: null,
+                    ClaimSummary: externalInfo.Value.Summary,
+                    BoundHash: null,
+                    Limitations: limitations
+                ));
+            }
+
+            return Task.FromResult(new C2paDetailedInspectionResult(
+                ManifestPresent: false,
+                StructureValid: false,
+                SignatureValid: false,
+                SignerTrusted: false,
+                SignerIdentity: null,
+                SignerThumbprint: null,
+                HardBindingValid: false,
+                IsDerivative: false,
+                RecordsAiActions: false,
+                RecordedActions: Array.Empty<string>(),
+                IngredientRelationships: Array.Empty<string>(),
+                ManifestJson: null,
+                ClaimSummary: null,
+                BoundHash: null,
+                Limitations: limitations
             ));
         }
 
         var (manifestJson, signatureHex, cleanMediaBytes) = extracted.Value;
 
-        // Verify Signature
-        var manifestBytes = Encoding.UTF8.GetBytes(manifestJson);
         bool sigValid = false;
         try
         {
+            var manifestBytes = Encoding.UTF8.GetBytes(manifestJson);
             var sigBytes = Convert.FromHexString(signatureHex);
             sigValid = _signingRsa.VerifyData(manifestBytes, sigBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         }
@@ -187,13 +276,19 @@ public class C2paSigningService : IC2paService
             _logger.LogWarning(ex, "Failed to verify signature for media file {FileName}", fileName);
         }
 
-        // Parse claims
+        bool structureValid = false;
         string? boundHash = null;
-        string? actionType = null;
         string? issuer = null;
+        bool isDerivative = false;
+        bool recordsAiActions = false;
+        var recordedActions = new List<string>();
+        var ingredients = new List<string>();
+
         try
         {
             using var doc = JsonDocument.Parse(manifestJson);
+            structureValid = true;
+
             if (doc.RootElement.TryGetProperty("issuer", out var issElem))
             {
                 issuer = issElem.GetString();
@@ -203,21 +298,43 @@ public class C2paSigningService : IC2paService
             {
                 foreach (var assertion in assertions.EnumerateArray())
                 {
-                    if (assertion.TryGetProperty("label", out var labelElem))
+                    if (!assertion.TryGetProperty("label", out var labelElem)) continue;
+                    var label = labelElem.GetString();
+
+                    if (label == "c2pa.hash.data" && assertion.TryGetProperty("data", out var d) && d.TryGetProperty("hash", out var h))
                     {
-                        var label = labelElem.GetString();
-                        if (label == "c2pa.hash.data" && assertion.TryGetProperty("data", out var d) && d.TryGetProperty("hash", out var h))
+                        boundHash = h.GetString();
+                    }
+                    else if (label == "c2pa.actions" && assertion.TryGetProperty("data", out var ad) && ad.TryGetProperty("actions", out var acts))
+                    {
+                        foreach (var act in acts.EnumerateArray())
                         {
-                            boundHash = h.GetString();
-                        }
-                        else if (label == "c2pa.actions" && assertion.TryGetProperty("data", out var ad) && ad.TryGetProperty("actions", out var acts))
-                        {
-                            var firstAct = acts.EnumerateArray().FirstOrDefault();
-                            if (firstAct.ValueKind != JsonValueKind.Undefined && firstAct.TryGetProperty("action", out var act))
+                            var actionStr = act.TryGetProperty("action", out var aProp) ? aProp.GetString() : null;
+                            var dstStr = act.TryGetProperty("digitalSourceType", out var dstProp) ? dstProp.GetString() : null;
+                            if (!string.IsNullOrWhiteSpace(actionStr))
                             {
-                                actionType = act.GetString();
+                                recordedActions.Add(string.IsNullOrWhiteSpace(dstStr) ? actionStr : $"{actionStr} ({dstStr})");
+                                if (actionStr.Contains("edited", StringComparison.OrdinalIgnoreCase) ||
+                                    actionStr.Contains("transformed", StringComparison.OrdinalIgnoreCase) ||
+                                    actionStr.Contains("opened", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isDerivative = true;
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(dstStr) &&
+                                (dstStr.Contains("trainedAlgorithmicMedia", StringComparison.OrdinalIgnoreCase) ||
+                                 dstStr.Contains("compositeWithTrainedAlgorithmicMedia", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                recordsAiActions = true;
                             }
                         }
+                    }
+                    else if (label == "c2pa.ingredient" && assertion.TryGetProperty("data", out var ingData))
+                    {
+                        isDerivative = true;
+                        var title = ingData.TryGetProperty("title", out var t) ? t.GetString() : "ingredient";
+                        ingredients.Add(title ?? "ingredient");
                     }
                 }
             }
@@ -227,50 +344,52 @@ public class C2paSigningService : IC2paService
             _logger.LogWarning(ex, "Failed to parse JSON assertions from C2PA manifest.");
         }
 
-        // Verify Hard Binding
         using var sha256 = SHA256.Create();
         var currentCleanHash = Convert.ToHexStringLower(sha256.ComputeHash(cleanMediaBytes));
         var rawUploadedHash = Convert.ToHexStringLower(sha256.ComputeHash(mediaBytes));
 
-        bool hardBindingMatches = (!string.IsNullOrEmpty(boundHash)) && 
+        bool hardBindingValid = !string.IsNullOrEmpty(boundHash) &&
             (string.Equals(boundHash, currentCleanHash, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(boundHash, rawUploadedHash, StringComparison.OrdinalIgnoreCase));
 
-        C2paStatus finalStatus;
-        string message;
+        bool signerTrusted = sigValid && string.Equals(issuer, _issuerName, StringComparison.OrdinalIgnoreCase);
 
-        if (!sigValid)
-        {
-            finalStatus = C2paStatus.UntrustedSigner;
-            message = "C2PA manifest signature could not be verified by trust authority.";
-        }
-        else if (!hardBindingMatches)
-        {
-            finalStatus = C2paStatus.InvalidCredentials;
-            message = "Media payload does not match C2PA cryptographic hard-binding digest. File content was altered or stripped.";
-        }
-        else if (actionType == "c2pa.created")
-        {
-            finalStatus = C2paStatus.VerifiedOriginal;
-            message = "Cryptographically verified original capture with valid C2PA Content Credentials.";
-        }
-        else
-        {
-            finalStatus = C2paStatus.VerifiedProvenanceTransformed;
-            message = "Verified provenance with valid credentials, recorded as imported/transformed media.";
-        }
-
-        return Task.FromResult(new C2paVerificationResult(
-            Status: finalStatus,
-            HasManifest: true,
+        return Task.FromResult(new C2paDetailedInspectionResult(
+            ManifestPresent: true,
+            StructureValid: structureValid,
             SignatureValid: sigValid,
-            HardBindingValid: hardBindingMatches,
-            Issuer: issuer ?? _issuerName,
-            SignerThumbprint: _signingCert.Thumbprint,
+            SignerTrusted: signerTrusted,
+            SignerIdentity: issuer,
+            SignerThumbprint: signerTrusted ? _signingCert.Thumbprint : null,
+            HardBindingValid: hardBindingValid,
+            IsDerivative: isDerivative,
+            RecordsAiActions: recordsAiActions,
+            RecordedActions: recordedActions,
+            IngredientRelationships: ingredients,
             ManifestJson: manifestJson,
-            ClaimSummary: $"Action: {actionType ?? "Unknown"}, BoundHash: {boundHash ?? "None"}",
-            Message: message
+            ClaimSummary: $"Actions: {string.Join(", ", recordedActions)}; BoundHash: {boundHash ?? "None"}",
+            BoundHash: boundHash,
+            Limitations: limitations
         ));
+    }
+
+    private static (string Issuer, bool RecordsAi, List<string> Actions, string Summary)? DetectExternalC2paMarkers(byte[] mediaBytes)
+    {
+        var scanLen = Math.Min(mediaBytes.Length, 131072);
+        var ascii = Encoding.Latin1.GetString(mediaBytes, 0, scanLen);
+        bool hasJumb = ascii.Contains("jumb", StringComparison.Ordinal) && ascii.Contains("c2pa", StringComparison.OrdinalIgnoreCase);
+        if (!hasJumb) return null;
+
+        bool recordsAi = ascii.Contains("trainedAlgorithmicMedia", StringComparison.OrdinalIgnoreCase) ||
+                         ascii.Contains("openai", StringComparison.OrdinalIgnoreCase) ||
+                         ascii.Contains("dall-e", StringComparison.OrdinalIgnoreCase);
+
+        string issuer = ascii.Contains("openai", StringComparison.OrdinalIgnoreCase) ? "openai.com (External JUMBF)" : "External JUMBF Signer (Unverified Trust Chain)";
+        var actions = new List<string>();
+        if (recordsAi) actions.Add("c2pa.created (trainedAlgorithmicMedia)");
+        else actions.Add("external.c2pa.manifest");
+
+        return (issuer, recordsAi, actions, "External JUMBF C2PA block detected; cryptographic chain requires external trust validation.");
     }
 
     private byte[] EmbedManifestInMedia(byte[] mediaBytes, string mimeType, string manifestJson, string signatureHex)
@@ -283,8 +402,6 @@ public class C2paSigningService : IC2paService
         });
         var payloadBytes = Encoding.UTF8.GetBytes(manifestPayload);
 
-        // Format-specific injection:
-        // 1. JPEG: Inject APP11 marker (0xFF, 0xEB) after SOI marker (0xFF, 0xD8)
         if (mimeType.Contains("jpeg", StringComparison.OrdinalIgnoreCase) || mimeType.Contains("jpg", StringComparison.OrdinalIgnoreCase))
         {
             if (mediaBytes.Length >= 2 && mediaBytes[0] == 0xFF && mediaBytes[1] == 0xD8)
@@ -293,7 +410,6 @@ public class C2paSigningService : IC2paService
                 ms.WriteByte(0xFF);
                 ms.WriteByte(0xD8);
 
-                // Write APP11 segment: Marker (2 bytes) + Length (2 bytes, big-endian) + Identifier + payload
                 var marker = new byte[] { 0xFF, 0xEB };
                 var id = Encoding.ASCII.GetBytes("JP2C2PA\0");
                 var totalSegmentLength = 2 + id.Length + payloadBytes.Length;
@@ -306,27 +422,22 @@ public class C2paSigningService : IC2paService
                     ms.Write(id);
                     ms.Write(payloadBytes);
 
-                    // Write rest of JPEG
                     ms.Write(mediaBytes.AsSpan(2));
                     return ms.ToArray();
                 }
             }
         }
-        // 2. PNG: Inject 'caCI' (C2PA chunk) before IEND
         else if (mimeType.Contains("png", StringComparison.OrdinalIgnoreCase))
         {
-            // Standard PNG starts with 89 50 4E 47 0D 0A 1A 0A
             if (mediaBytes.Length >= 8 && mediaBytes[0] == 0x89 && mediaBytes[1] == 0x50)
             {
                 using var ms = new MemoryStream();
-                // Write up to IEND
                 var iendIndex = FindBytes(mediaBytes, Encoding.ASCII.GetBytes("IEND"));
                 if (iendIndex > 4)
                 {
                     var chunkOffset = iendIndex - 4;
                     ms.Write(mediaBytes, 0, chunkOffset);
 
-                    // Write custom caCI chunk: Length (4 bytes) + 'caCI' (4 bytes) + data + CRC (4 bytes)
                     var chunkType = Encoding.ASCII.GetBytes("caCI");
                     var lenBytes = BitConverter.GetBytes((uint)payloadBytes.Length);
                     if (BitConverter.IsLittleEndian) Array.Reverse(lenBytes);
@@ -335,25 +446,21 @@ public class C2paSigningService : IC2paService
                     ms.Write(chunkType);
                     ms.Write(payloadBytes);
 
-                    // Fake CRC or compute
                     var crc = ComputeCrc32(chunkType.Concat(payloadBytes).ToArray());
                     var crcBytes = BitConverter.GetBytes(crc);
                     if (BitConverter.IsLittleEndian) Array.Reverse(crcBytes);
                     ms.Write(crcBytes);
 
-                    // Write IEND and tail
                     ms.Write(mediaBytes, chunkOffset, mediaBytes.Length - chunkOffset);
                     return ms.ToArray();
                 }
             }
         }
-        // 3. MP4 / Video: Inject 'uuid' box or trailer
         else if (mimeType.Contains("mp4", StringComparison.OrdinalIgnoreCase) || mimeType.Contains("video", StringComparison.OrdinalIgnoreCase))
         {
             using var ms = new MemoryStream();
             ms.Write(mediaBytes);
 
-            // Write UUID Box at end of MP4: Box size (4 bytes) + 'uuid' (4 bytes) + UUID (16 bytes) + payload
             var boxLength = 4 + 4 + Mp4C2paUuid.Length + payloadBytes.Length;
             var boxLenBytes = BitConverter.GetBytes((uint)boxLength);
             if (BitConverter.IsLittleEndian) Array.Reverse(boxLenBytes);
@@ -366,7 +473,6 @@ public class C2paSigningService : IC2paService
             return ms.ToArray();
         }
 
-        // Generic fallback: append safe trailer
         using (var ms = new MemoryStream())
         {
             ms.Write(mediaBytes);
@@ -381,7 +487,6 @@ public class C2paSigningService : IC2paService
 
     private (string ManifestJson, string Signature, byte[] CleanBytes)? ExtractManifestFromMedia(byte[] mediaBytes, string mimeType)
     {
-        // 1. Check for JPEG APP11
         if (mediaBytes.Length > 4 && mediaBytes[0] == 0xFF && mediaBytes[1] == 0xD8)
         {
             var app11Index = FindBytes(mediaBytes, new byte[] { 0xFF, 0xEB });
@@ -402,7 +507,6 @@ public class C2paSigningService : IC2paService
                             var parsed = ParseManifestPayload(payloadJson);
                             if (parsed != null)
                             {
-                                // Remove segment for clean bytes calculation
                                 var clean = mediaBytes.Take(app11Index).Concat(mediaBytes.Skip(app11Index + 2 + segLen)).ToArray();
                                 return (parsed.Value.ManifestJson, parsed.Value.Signature, clean);
                             }
@@ -412,7 +516,6 @@ public class C2paSigningService : IC2paService
             }
         }
 
-        // 2. Check for PNG 'caCI'
         var caciIndex = FindBytes(mediaBytes, Encoding.ASCII.GetBytes("caCI"));
         if (caciIndex >= 4)
         {
@@ -425,14 +528,13 @@ public class C2paSigningService : IC2paService
                 var parsed = ParseManifestPayload(payloadJson);
                 if (parsed != null)
                 {
-                    var totalChunkLen = 4 + 4 + (int)len + 4; // length + type + data + crc
+                    var totalChunkLen = 4 + 4 + (int)len + 4;
                     var clean = mediaBytes.Take(caciIndex - 4).Concat(mediaBytes.Skip(caciIndex - 4 + totalChunkLen)).ToArray();
                     return (parsed.Value.ManifestJson, parsed.Value.Signature, clean);
                 }
             }
         }
 
-        // 3. Check for MP4 UUID box
         var uuidIndex = FindBytes(mediaBytes, Mp4C2paUuid);
         if (uuidIndex >= 8)
         {
@@ -453,7 +555,6 @@ public class C2paSigningService : IC2paService
             }
         }
 
-        // 4. Check for trailer fallback
         var tag = Encoding.ASCII.GetBytes("---BEGIN_VX_C2PA---");
         var trailerIdx = FindBytes(mediaBytes, tag);
         if (trailerIdx >= 0)
@@ -477,7 +578,7 @@ public class C2paSigningService : IC2paService
         return null;
     }
 
-    private (string ManifestJson, string Signature)? ParseManifestPayload(string payload)
+    private static (string ManifestJson, string Signature)? ParseManifestPayload(string payload)
     {
         try
         {

@@ -12,9 +12,14 @@ public class MediaItem
     public long FileSizeBytes { get; set; }
     public string OriginalSha256 { get; set; } = string.Empty;
     public string? SignedSha256 { get; set; }
+    public string? PerceptualHash { get; set; }
     public string StoragePath { get; set; } = string.Empty;
+    public string? OriginalArtifactPath { get; set; }
     public string? ThumbnailStoragePath { get; set; }
     public SourceType SourceType { get; set; } = SourceType.Camera;
+    public string? AppVersion { get; set; }
+    public string? DeviceKeyId { get; set; }
+    public string? PlatformAttestationStatus { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAtUtc { get; set; }
     public bool IsDeleted { get; set; } = false;

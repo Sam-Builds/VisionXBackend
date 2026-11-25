@@ -6,11 +6,15 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using UIBackend.Api.Security;
 using UIBackend.Application.Interfaces;
+using UIBackend.Infrastructure.AiDetection;
 using UIBackend.Infrastructure.C2pa;
+using UIBackend.Infrastructure.Fingerprinting;
+using UIBackend.Infrastructure.Forensics;
 using UIBackend.Infrastructure.Notifications;
 using UIBackend.Infrastructure.Persistence;
 using UIBackend.Infrastructure.Storage;
 using UIBackend.Infrastructure.SynthId;
+using UIBackend.Infrastructure.Verification;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +39,7 @@ builder.Services.AddScoped<IUIBackendDbContext>(sp => sp.GetRequiredService<UIBa
 builder.Services.AddHttpClient("JwksClient");
 builder.Services.AddHttpClient("NotificationsClient");
 builder.Services.AddHttpClient("SynthIdClient");
+builder.Services.AddHttpClient("OpenAiClient");
 
 // Security & Key Providers
 builder.Services.AddSingleton<JwksKeyProvider>();
@@ -106,8 +111,15 @@ builder.Services.AddCors(options =>
 
 // Domain & Infrastructure Services
 builder.Services.AddSingleton<IMediaStorageService, FileSystemMediaStorageService>();
-builder.Services.AddSingleton<IC2paService, C2paSigningService>();
+builder.Services.AddSingleton<C2paSigningService>();
+builder.Services.AddSingleton<IC2paService>(sp => sp.GetRequiredService<C2paSigningService>());
+builder.Services.AddSingleton<IC2paVerificationProvider>(sp => sp.GetRequiredService<C2paSigningService>());
 builder.Services.AddSingleton<ISynthIdDetectionProvider, GoogleSynthIdDetectionProvider>();
+builder.Services.AddSingleton<IMediaFingerprintProvider, PerceptualHashService>();
+builder.Services.AddSingleton<IImageForensicsProvider, ImageForensicsService>();
+builder.Services.AddSingleton<IAiDetectionProvider, OpenAiContentProvenanceProvider>();
+builder.Services.AddSingleton<IAiDetectionProvider, SynthIdAiDetectionProvider>();
+builder.Services.AddScoped<IVerificationOrchestrator, VerificationOrchestrator>();
 builder.Services.AddScoped<INotificationServiceClient, VisionXNotificationClient>();
 
 builder.Services.AddControllers();

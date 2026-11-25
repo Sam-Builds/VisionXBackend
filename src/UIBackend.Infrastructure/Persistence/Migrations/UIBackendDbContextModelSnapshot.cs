@@ -22,6 +22,59 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.AiDetectionCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CheckedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("DetectionStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EvidenceJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Limitations")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModelDetected")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ProviderVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResultLabel")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("VerificationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VerificationRunId");
+
+                    b.ToTable("AiDetectionChecks");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.CaptureRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -105,6 +158,45 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.ToTable("CaptureRecords");
                 });
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.ForensicCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CheckedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExifAnomaliesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FindingsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Limitations")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RegionDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("VerificationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VerificationRunId");
+
+                    b.ToTable("ForensicChecks");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.MediaAccessEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -164,8 +256,16 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceKeyId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<long>("FileSizeBytes")
                         .HasColumnType("bigint");
@@ -181,6 +281,10 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("OriginalArtifactPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("OriginalFileName")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -190,6 +294,14 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PerceptualHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PlatformAttestationStatus")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("SignedSha256")
                         .HasMaxLength(64)
@@ -221,11 +333,119 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OriginalSha256");
 
+                    b.HasIndex("PerceptualHash");
+
                     b.HasIndex("SignedSha256");
 
                     b.HasIndex("UserId");
 
                     b.ToTable("MediaItems");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MediaMatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("DiffersFromOriginal")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ExactByteMatch")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasValidEmbeddedCredentials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAmbiguous")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MatchMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MatchedMediaItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Similarity")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("VerificationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchedMediaItemId");
+
+                    b.HasIndex("VerificationRunId");
+
+                    b.ToTable("MediaMatches");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.ProvenanceCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CheckedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HardBindingValid")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IngredientRelationshipsJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDerivative")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Limitations")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ManifestPresent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProvenanceDetailsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RecordedActionsJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RecordsAiActions")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SignatureValid")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SignerIdentity")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("SignerTrusted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SoftBindingMatch")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("StructureValid")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("VerificationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VerificationRunId");
+
+                    b.ToTable("ProvenanceChecks");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ShareLink", b =>
@@ -260,6 +480,17 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("MediaItemId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("OwnerNotificationEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShareTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -270,6 +501,8 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("MediaItemId");
+
+                    b.HasIndex("ShareTokenHash");
 
                     b.HasIndex("Token")
                         .IsUnique();
@@ -358,6 +591,80 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.ToTable("VerificationRecords");
                 });
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.VerificationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("InputFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("InputFormat")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("InputPerceptualHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("InputSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("MediaItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OverallAssessment")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InputHash");
+
+                    b.HasIndex("MediaItemId");
+
+                    b.HasIndex("StartedAtUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("VerificationRuns");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.AiDetectionCheck", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.VerificationRun", "VerificationRun")
+                        .WithMany("AiDetectionChecks")
+                        .HasForeignKey("VerificationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("VerificationRun");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.CaptureRecord", b =>
                 {
                     b.HasOne("UIBackend.Domain.Entities.MediaItem", "MediaItem")
@@ -367,6 +674,17 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MediaItem");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.ForensicCheck", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.VerificationRun", "VerificationRun")
+                        .WithMany("ForensicChecks")
+                        .HasForeignKey("VerificationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("VerificationRun");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.MediaAccessEvent", b =>
@@ -384,6 +702,36 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("MediaItem");
 
                     b.Navigation("ShareLink");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MediaMatch", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.MediaItem", "MatchedMediaItem")
+                        .WithMany()
+                        .HasForeignKey("MatchedMediaItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("UIBackend.Domain.Entities.VerificationRun", "VerificationRun")
+                        .WithMany("MediaMatches")
+                        .HasForeignKey("VerificationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MatchedMediaItem");
+
+                    b.Navigation("VerificationRun");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.ProvenanceCheck", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.VerificationRun", "VerificationRun")
+                        .WithMany("ProvenanceChecks")
+                        .HasForeignKey("VerificationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("VerificationRun");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ShareLink", b =>
@@ -407,6 +755,16 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("MediaItem");
                 });
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.VerificationRun", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.MediaItem", "MediaItem")
+                        .WithMany()
+                        .HasForeignKey("MediaItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("MediaItem");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.MediaItem", b =>
                 {
                     b.Navigation("AccessEvents");
@@ -416,6 +774,17 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("ShareLinks");
 
                     b.Navigation("VerificationRecords");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.VerificationRun", b =>
+                {
+                    b.Navigation("AiDetectionChecks");
+
+                    b.Navigation("ForensicChecks");
+
+                    b.Navigation("MediaMatches");
+
+                    b.Navigation("ProvenanceChecks");
                 });
 #pragma warning restore 612, 618
         }
