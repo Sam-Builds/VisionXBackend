@@ -1,0 +1,13 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+media_storage/
+*.tmp
+.env
+.env.local
+.env.main
+.env.example

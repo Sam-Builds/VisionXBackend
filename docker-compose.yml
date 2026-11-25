@@ -1,0 +1,73 @@
+services:
+  visionx-uibackend-db:
+    image: postgres:17-alpine
+    container_name: visionx-uibackend-postgres
+    restart: unless-stopped
+    env_file:
+      - path: /opt/VisionX/secrets/.env.uibackend
+        required: false
+      - path: ./.env
+        required: false
+      - path: ./.env.example
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-visionx_uibackend}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5436}:5432"
+    volumes:
+      - uibackend_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-visionx_uibackend}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  visionx-uibackend-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visionx-uibackend-service
+    restart: unless-stopped
+    ports:
+      - "${UIBACKEND_PORT:-8020}:8080"
+    depends_on:
+      visionx-uibackend-db:
+        condition: service_healthy
+    env_file:
+      - path: /opt/VisionX/secrets/.env.uibackend
+        required: false
+      - path: ./.env
+        required: false
+      - path: ./.env.example
+        required: false
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__UIBackendDatabase: Host=visionx-uibackend-db;Port=5432;Database=${POSTGRES_DB:-visionx_uibackend};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      Jwt__Issuer: ${JWT_ISSUER:-https://visionx.samstack.site/auth}
+      Jwt__Audience: ${JWT_AUDIENCE:-visionx-app}
+      Jwt__JwksUrl: ${JWT_JWKS_URL:-https://visionx.samstack.site/auth/.well-known/jwks.json}
+      Jwt__PublicKeyPath: ${JWT_PUBLIC_KEY_PATH:-/run/secrets/jwt_public.pem}
+      Jwt__PublicKeyPem: ${JWT_PUBLIC_KEY_PEM:-}
+      MEDIA_STORAGE_PATH: ${MEDIA_STORAGE_PATH:-/opt/visionx/media}
+      C2pa__Issuer: ${C2PA_ISSUER:-VisionX Trust Authority}
+      C2pa__CertificatePath: ${C2PA_CERT_PATH:-/run/secrets/c2pa_cert.pem}
+      C2pa__PrivateKeyPath: ${C2PA_PRIVATE_KEY_PATH:-/run/secrets/c2pa_private.pem}
+      Notifications__BaseUrl: ${NOTIFICATIONS_BASE_URL:-http://visionx-notifications-api:8080}
+      Notifications__WebhookSecret: ${SESSION_WEBHOOK_SECRET:-VisionX_SessionEvent_SharedSecret_2026}
+    volumes:
+      - media_storage_data:/opt/visionx/media
+      - ${JWT_SECRETS_DIR:-/opt/VisionX/secrets}:/run/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  uibackend_pgdata:
+  media_storage_data:

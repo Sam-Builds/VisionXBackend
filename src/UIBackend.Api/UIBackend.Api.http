@@ -1,0 +1,6 @@
+@UIBackend.Api_HostAddress = http://localhost:5252
+
+GET {{UIBackend.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
