@@ -4,6 +4,8 @@ services:
     container_name: visionx-uibackend-postgres
     restart: unless-stopped
     env_file:
+      - path: /opt/VisionX/secrets/.env.backend
+        required: false
       - path: /opt/VisionX/secrets/.env.uibackend
         required: false
       - path: ./.env
@@ -36,6 +38,8 @@ services:
       visionx-uibackend-db:
         condition: service_healthy
     env_file:
+      - path: /opt/VisionX/secrets/.env.backend
+        required: false
       - path: /opt/VisionX/secrets/.env.uibackend
         required: false
       - path: ./.env

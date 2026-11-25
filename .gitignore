@@ -10,4 +10,4 @@ media_storage/
 .env
 .env.local
 .env.main
-.env.example
+.env.exampletest.txt

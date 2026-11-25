@@ -1,21 +1,15 @@
-name: Deploy UIBackend Service
+name: Deploy Backend
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'UIBackend/**'
-      - '.github/workflows/deploy.yml'
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: self-hosted
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
 
-      - name: Deploy with Docker Compose
-        run: |
-          chmod +x UIBackend/deploy.sh
-          ./UIBackend/deploy.sh
+    steps:
+      - name: Deploy
+        run: /opt/VisionX/Backend/deploy.sh
