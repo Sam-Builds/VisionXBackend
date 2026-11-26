@@ -62,6 +62,12 @@ services:
       C2pa__PrivateKeyPath: ${C2PA_PRIVATE_KEY_PATH:-/run/secrets/c2pa_private.pem}
       Notifications__BaseUrl: ${NOTIFICATIONS_BASE_URL:-http://visionx-notifications-api:8080}
       Notifications__WebhookSecret: ${SESSION_WEBHOOK_SECRET:-VisionX_SessionEvent_SharedSecret_2026}
+      MlService__BaseUrl: ${ML_SERVICE_BASE_URL:-https://visionxml.samstack.site}
+      MlService__ApiKey: ${ML_SERVICE_API_KEY:-VisionX_ML_Service_Key_2026}
+      MlService__CallbackUrl: ${ML_SERVICE_CALLBACK_URL:-https://visionx.samstack.site/a/api/ml/events}
+      Monitoring__AllowPrivateNetworks: ${MONITORING_ALLOW_PRIVATE_NETWORKS:-false}
+      Monitoring__EnableDevTestEndpoints: ${MONITORING_ENABLE_DEV_TEST_ENDPOINTS:-false}
+      STREAM_CREDENTIAL_KEY: ${STREAM_CREDENTIAL_KEY:-change-this-32-char-encryption-key}
     volumes:
       - media_storage_data:/opt/visionx/media
       - ${JWT_SECRETS_DIR:-/opt/VisionX/secrets}:/run/secrets:ro
