@@ -86,14 +86,29 @@ public class MlEventsController : ControllerBase
             ?? Environment.GetEnvironmentVariable("ML_SERVICE_API_KEY")
             ?? "VisionX_ML_Service_Key_2026";
 
-        if (!Request.Headers.TryGetValue("X-ML-Service-Key", out var providedKey) ||
-            string.IsNullOrWhiteSpace(providedKey))
+        string? provided = null;
+        if (Request.Headers.TryGetValue("X-ML-Service-Key", out var headerKey) &&
+            !string.IsNullOrWhiteSpace(headerKey))
+        {
+            provided = headerKey.ToString().Trim();
+        }
+        else if (Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+                 !string.IsNullOrWhiteSpace(authHeader))
+        {
+            var rawAuth = authHeader.ToString().Trim();
+            if (rawAuth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                provided = rawAuth.Substring("Bearer ".Length).Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(provided))
         {
             return false;
         }
 
         var expectedBytes = Encoding.UTF8.GetBytes(configuredKey);
-        var actualBytes = Encoding.UTF8.GetBytes(providedKey.ToString().Trim());
+        var actualBytes = Encoding.UTF8.GetBytes(provided);
         return expectedBytes.Length == actualBytes.Length &&
                CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
     }

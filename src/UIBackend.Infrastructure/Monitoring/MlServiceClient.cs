@@ -26,7 +26,7 @@ public class MlServiceClient : IMlServiceClient
 
     private string BaseUrl => (_configuration["MlService:BaseUrl"]
         ?? Environment.GetEnvironmentVariable("ML_SERVICE_BASE_URL")
-        ?? "https://visionx.samstack.site/ML").TrimEnd('/');
+        ?? "https://visionxml.samstack.site").TrimEnd('/');
 
     private string ServiceApiKey => _configuration["MlService:ApiKey"]
         ?? Environment.GetEnvironmentVariable("ML_SERVICE_API_KEY")
@@ -57,7 +57,10 @@ public class MlServiceClient : IMlServiceClient
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
 
-            var response = await client.PostAsJsonAsync($"{BaseUrl}/api/jobs/start", payload, cts.Token);
+            var response = await client.PostAsJsonAsync(
+                $"{BaseUrl}/v1/devices/{device.Id}/start",
+                payload,
+                cts.Token);
             var body = await response.Content.ReadAsStringAsync(cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -124,7 +127,7 @@ public class MlServiceClient : IMlServiceClient
             cts.CancelAfter(TimeSpan.FromSeconds(8));
 
             var response = await client.PostAsJsonAsync(
-                $"{BaseUrl}/api/jobs/stop",
+                $"{BaseUrl}/v1/devices/{deviceId}/stop",
                 new { deviceId, jobId },
                 cts.Token);
 
@@ -152,7 +155,7 @@ public class MlServiceClient : IMlServiceClient
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(6));
 
-            var response = await client.GetAsync($"{BaseUrl}/api/jobs/{Uri.EscapeDataString(jobId)}/status", cts.Token);
+            var response = await client.GetAsync($"{BaseUrl}/v1/devices/{deviceId}/status", cts.Token);
             if (!response.IsSuccessStatusCode)
             {
                 return new MlStatusResult(true, DeviceStatus.Error, null, null, $"ML status returned HTTP {(int)response.StatusCode}.");
@@ -192,6 +195,8 @@ public class MlServiceClient : IMlServiceClient
         {
             client.DefaultRequestHeaders.Remove("X-ML-Service-Key");
             client.DefaultRequestHeaders.Add("X-ML-Service-Key", ServiceApiKey);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ServiceApiKey);
         }
         return client;
     }

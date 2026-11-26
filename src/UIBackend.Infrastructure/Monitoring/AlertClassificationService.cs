@@ -157,9 +157,7 @@ public class AlertClassificationService : IAlertClassificationService
         else
         {
             var title = BuildAlertTitle(severity, request.DetectionType, device.Name, isTest);
-            var desc = !string.IsNullOrWhiteSpace(request.Description)
-                ? request.Description
-                : $"Unusual {request.DetectionType} activity detected by {device.Name}.";
+            var desc = BuildDescription(request, device.Name);
 
             shouldEnqueueNotification = ShouldNotify(severity);
 
@@ -291,5 +289,35 @@ public class AlertClassificationService : IAlertClassificationService
             _ => "Info"
         };
         return $"{prefix}{sevLabel} - {deviceName}";
+    }
+
+    private static string BuildDescription(MlDetectionEventRequest request, string deviceName)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Description))
+            return request.Description;
+
+        if (request.Metadata != null)
+        {
+            foreach (var key in new[] { "threats", "reasons" })
+            {
+                if (request.Metadata.TryGetValue(key, out var raw) && raw is JsonElement el && el.ValueKind == JsonValueKind.Array)
+                {
+                    var items = el.EnumerateArray()
+                        .Select(x => x.GetString())
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .ToList();
+                    if (items.Count > 0)
+                        return string.Join(" • ", items);
+                }
+            }
+            if (request.Metadata.TryGetValue("actionLabel", out var act) && act != null)
+            {
+                var label = act.ToString();
+                if (!string.IsNullOrWhiteSpace(label))
+                    return $"{label} detected on {deviceName} ({request.Confidence:P0} confidence).";
+            }
+        }
+
+        return $"Unusual {request.DetectionType} activity detected by {deviceName} ({request.Confidence:P0} confidence).";
     }
 }
