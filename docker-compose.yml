@@ -71,6 +71,7 @@ services:
     volumes:
       - media_storage_data:/opt/visionx/media
       - ${JWT_SECRETS_DIR:-/opt/VisionX/secrets}:/run/secrets:ro
+      - ../testvids:/app/testvids:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 15s

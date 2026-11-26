@@ -73,9 +73,13 @@ public class AlertClassificationService : IAlertClassificationService
             return new MlIngestionResponse(false, false, null, null, null, null, null, null, "Target device not found.");
         }
 
-        var effectiveIsTest = isTest || device.IsTest;
+        // Automatically tag real ML callbacks originating from a temporary [TEST VIDEO] device
+        if (!isTest && device.Name.StartsWith("[TEST VIDEO]", StringComparison.OrdinalIgnoreCase))
+        {
+            isTest = true;
+        }
 
-        if (!isTest)
+        if (!isTest || device.Name.StartsWith("[TEST VIDEO]", StringComparison.OrdinalIgnoreCase))
         {
             var validJob = await _dbContext.MonitoringJobs
                 .AnyAsync(j => j.DeviceId == device.Id && j.ExternalJobId == request.JobId, cancellationToken)
@@ -113,14 +117,14 @@ public class AlertClassificationService : IAlertClassificationService
             SnapshotReference = request.SnapshotReference,
             ObservedAtUtc = request.Timestamp.ToUniversalTime(),
             CreatedAtUtc = DateTime.UtcNow,
-            IsTest = effectiveIsTest
+            IsTest = isTest
         };
         _dbContext.DetectionRecords.Add(detection);
 
         // 5. Central Backend Severity Classification Policy (never trust ML-supplied severity)
         var severity = ClassifySeverity(request.DetectionType, request.AnomalyScore, request.Confidence);
         var cooldownSeconds = _configuration.GetValue<int?>("AlertPolicy:NotificationCooldownSeconds") ?? 120;
-        var dedupKey = $"{device.Id:N}:{request.DetectionType.Trim().ToLowerInvariant()}:{(effectiveIsTest ? "test" : "live")}";
+        var dedupKey = $"{device.Id:N}:{request.DetectionType.Trim().ToLowerInvariant()}:{(isTest ? "test" : "live")}";
         var now = DateTime.UtcNow;
 
         // 6. Check recent active alert for deduplication / escalation
@@ -149,7 +153,7 @@ public class AlertClassificationService : IAlertClassificationService
             if (recentAlert.Severity == AlertSeverity.Warning && severity == AlertSeverity.Critical)
             {
                 recentAlert.Severity = AlertSeverity.Critical;
-                recentAlert.Title = BuildAlertTitle(AlertSeverity.Critical, request.DetectionType, device.Name, effectiveIsTest);
+                recentAlert.Title = BuildAlertTitle(AlertSeverity.Critical, request.DetectionType, device.Name, isTest);
                 shouldEnqueueNotification = ShouldNotify(AlertSeverity.Critical);
                 notificationActionReason = "Escalated from WARNING to CRITICAL";
             }
@@ -158,7 +162,7 @@ public class AlertClassificationService : IAlertClassificationService
         }
         else
         {
-            var title = BuildAlertTitle(severity, request.DetectionType, device.Name, effectiveIsTest);
+            var title = BuildAlertTitle(severity, request.DetectionType, device.Name, isTest);
             var desc = BuildDescription(request, device.Name);
 
             shouldEnqueueNotification = ShouldNotify(severity);
@@ -178,7 +182,7 @@ public class AlertClassificationService : IAlertClassificationService
                 OccurrenceCount = 1,
                 LastOccurrenceAtUtc = now,
                 CreatedAtUtc = now,
-                IsTest = effectiveIsTest
+                IsTest = isTest
             };
             _dbContext.AlertRecords.Add(alert);
         }
@@ -195,7 +199,7 @@ public class AlertClassificationService : IAlertClassificationService
                 {
                     eventId = outboxEventId,
                     eventType = $"alert.{alert.Severity.ToString().ToLowerInvariant()}",
-                    source = effectiveIsTest ? "VisionXBackend.TestFeed" : "VisionXBackend",
+                    source = isTest ? "VisionXBackend.DevTest" : "VisionXBackend",
                     correlationId = alert.Id.ToString(),
                     title = alert.Title,
                     body = alert.Description,
@@ -207,7 +211,7 @@ public class AlertClassificationService : IAlertClassificationService
                         { "deviceId", device.Id.ToString() },
                         { "deviceName", device.Name },
                         { "severity", alert.Severity.ToString().ToUpperInvariant() },
-                        { "isTest", effectiveIsTest.ToString().ToLowerInvariant() }
+                        { "isTest", isTest.ToString().ToLowerInvariant() }
                     },
                     directRecipientUserIds = new[] { device.OwnerUserId },
                     occurredAt = now

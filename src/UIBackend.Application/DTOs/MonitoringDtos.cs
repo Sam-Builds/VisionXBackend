@@ -7,8 +7,7 @@ public record CreateDeviceRequest(
     string FeedUrl,
     string? StreamUsername,
     string? StreamPassword,
-    bool MonitoringEnabled = false,
-    bool IsTest = false
+    bool MonitoringEnabled = false
 );
 
 public record UpdateDeviceRequest(
@@ -33,8 +32,7 @@ public record DeviceDto(
     string? LastError,
     int ConfigurationVersion,
     DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc,
-    bool IsTest = false
+    DateTime UpdatedAtUtc
 );
 
 public record DeviceStatusDto(
