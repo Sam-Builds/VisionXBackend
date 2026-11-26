@@ -73,6 +73,8 @@ public class AlertClassificationService : IAlertClassificationService
             return new MlIngestionResponse(false, false, null, null, null, null, null, null, "Target device not found.");
         }
 
+        var effectiveIsTest = isTest || device.IsTest;
+
         if (!isTest)
         {
             var validJob = await _dbContext.MonitoringJobs
@@ -111,14 +113,14 @@ public class AlertClassificationService : IAlertClassificationService
             SnapshotReference = request.SnapshotReference,
             ObservedAtUtc = request.Timestamp.ToUniversalTime(),
             CreatedAtUtc = DateTime.UtcNow,
-            IsTest = isTest
+            IsTest = effectiveIsTest
         };
         _dbContext.DetectionRecords.Add(detection);
 
         // 5. Central Backend Severity Classification Policy (never trust ML-supplied severity)
         var severity = ClassifySeverity(request.DetectionType, request.AnomalyScore, request.Confidence);
         var cooldownSeconds = _configuration.GetValue<int?>("AlertPolicy:NotificationCooldownSeconds") ?? 120;
-        var dedupKey = $"{device.Id:N}:{request.DetectionType.Trim().ToLowerInvariant()}:{(isTest ? "test" : "live")}";
+        var dedupKey = $"{device.Id:N}:{request.DetectionType.Trim().ToLowerInvariant()}:{(effectiveIsTest ? "test" : "live")}";
         var now = DateTime.UtcNow;
 
         // 6. Check recent active alert for deduplication / escalation
@@ -147,7 +149,7 @@ public class AlertClassificationService : IAlertClassificationService
             if (recentAlert.Severity == AlertSeverity.Warning && severity == AlertSeverity.Critical)
             {
                 recentAlert.Severity = AlertSeverity.Critical;
-                recentAlert.Title = BuildAlertTitle(AlertSeverity.Critical, request.DetectionType, device.Name, isTest);
+                recentAlert.Title = BuildAlertTitle(AlertSeverity.Critical, request.DetectionType, device.Name, effectiveIsTest);
                 shouldEnqueueNotification = ShouldNotify(AlertSeverity.Critical);
                 notificationActionReason = "Escalated from WARNING to CRITICAL";
             }
@@ -156,7 +158,7 @@ public class AlertClassificationService : IAlertClassificationService
         }
         else
         {
-            var title = BuildAlertTitle(severity, request.DetectionType, device.Name, isTest);
+            var title = BuildAlertTitle(severity, request.DetectionType, device.Name, effectiveIsTest);
             var desc = BuildDescription(request, device.Name);
 
             shouldEnqueueNotification = ShouldNotify(severity);
@@ -176,7 +178,7 @@ public class AlertClassificationService : IAlertClassificationService
                 OccurrenceCount = 1,
                 LastOccurrenceAtUtc = now,
                 CreatedAtUtc = now,
-                IsTest = isTest
+                IsTest = effectiveIsTest
             };
             _dbContext.AlertRecords.Add(alert);
         }
@@ -193,7 +195,7 @@ public class AlertClassificationService : IAlertClassificationService
                 {
                     eventId = outboxEventId,
                     eventType = $"alert.{alert.Severity.ToString().ToLowerInvariant()}",
-                    source = isTest ? "VisionXBackend.DevTest" : "VisionXBackend",
+                    source = effectiveIsTest ? "VisionXBackend.TestFeed" : "VisionXBackend",
                     correlationId = alert.Id.ToString(),
                     title = alert.Title,
                     body = alert.Description,
@@ -205,7 +207,7 @@ public class AlertClassificationService : IAlertClassificationService
                         { "deviceId", device.Id.ToString() },
                         { "deviceName", device.Name },
                         { "severity", alert.Severity.ToString().ToUpperInvariant() },
-                        { "isTest", isTest.ToString().ToLowerInvariant() }
+                        { "isTest", effectiveIsTest.ToString().ToLowerInvariant() }
                     },
                     directRecipientUserIds = new[] { device.OwnerUserId },
                     occurredAt = now

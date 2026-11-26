@@ -19,6 +19,7 @@ public class MonitoredDevice
     public int ConfigurationVersion { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsTest { get; set; } = false;
     public bool IsDeleted { get; set; } = false;
 
     public ICollection<MonitoringJob> Jobs { get; set; } = new List<MonitoringJob>();

@@ -88,7 +88,8 @@ public class DevicesController : ControllerBase
             MonitoringEnabled = request.MonitoringEnabled,
             ConfigurationVersion = 1,
             CreatedAtUtc = now,
-            UpdatedAtUtc = now
+            UpdatedAtUtc = now,
+            IsTest = request.IsTest
         };
 
         // Persist device before attempting ML monitoring start
@@ -415,7 +416,8 @@ public class DevicesController : ControllerBase
             LastError: d.LastError,
             ConfigurationVersion: d.ConfigurationVersion,
             CreatedAtUtc: d.CreatedAtUtc,
-            UpdatedAtUtc: d.UpdatedAtUtc
+            UpdatedAtUtc: d.UpdatedAtUtc,
+            IsTest: d.IsTest
         );
     }
 }

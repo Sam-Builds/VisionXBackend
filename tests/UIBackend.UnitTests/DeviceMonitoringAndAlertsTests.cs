@@ -182,6 +182,55 @@ public class DeviceMonitoringAndAlertsTests
         Assert.Equal(1, await db.AlertRecords.CountAsync());
     }
 
+    [Fact]
+    public async Task TestDevice_RealMlEvent_PersistsTestFlagAndPrefixesAlertTitle()
+    {
+        var db = CreateDb();
+        var config = CreateConfig();
+
+        string? capturedPayload = null;
+        var factory = new MockHttpClientFactory(req =>
+        {
+            capturedPayload = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"accepted\":true}")
+            };
+        });
+
+        var outbox = new NotificationOutboxService(db, factory, config, NullLogger<NotificationOutboxService>.Instance);
+        var classifier = new AlertClassificationService(db, outbox, config, NullLogger<AlertClassificationService>.Instance);
+
+        var testDevice = new MonitoredDevice
+        {
+            Id = Guid.NewGuid(),
+            OwnerUserId = "user_test",
+            Name = "[TEST] sample.mp4",
+            FeedUrl = "https://visionx.samstack.site/webinput/stream/test-1234",
+            ActiveJobId = "job-test-1234",
+            IsTest = true
+        };
+        db.MonitoredDevices.Add(testDevice);
+        await db.SaveChangesAsync();
+
+        var res = await classifier.ProcessDetectionEventAsync(new MlDetectionEventRequest(
+            "evt-test-feed-1", testDevice.Id, "job-test-1234", DateTime.UtcNow, "running", 0.91, 0.85, "yolo11n", "1.0", "Person running", null, null),
+            isTest: false);
+
+        Assert.True(res.Accepted);
+        Assert.Equal(AlertSeverity.Critical, res.AssignedSeverity);
+        Assert.Equal(NotificationDispatchStatus.Sent, res.NotificationStatus);
+
+        var detection = await db.DetectionRecords.FirstAsync();
+        Assert.True(detection.IsTest);
+
+        var alert = await db.AlertRecords.FirstAsync();
+        Assert.True(alert.IsTest);
+        Assert.StartsWith("[TEST] ", alert.Title);
+        Assert.NotNull(capturedPayload);
+        Assert.Contains("\"isTest\":\"true\"", capturedPayload);
+    }
+
     private sealed class MockHttpClientFactory : IHttpClientFactory
     {
         private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;

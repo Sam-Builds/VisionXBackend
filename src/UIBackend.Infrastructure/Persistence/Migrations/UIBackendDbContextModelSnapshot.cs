@@ -566,6 +566,9 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LastError")
                         .HasColumnType("text");
 
