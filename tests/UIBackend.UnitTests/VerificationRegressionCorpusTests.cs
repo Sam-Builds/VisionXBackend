@@ -214,7 +214,33 @@ public class VerificationRegressionCorpusTests
         Assert.NotEqual(OverallAssessment.OriginalCaptureVerified, resNoSignal.Assessment.Result);
         Assert.NotEqual(OverallAssessment.ProvenanceVerifiedModified, resNoSignal.Assessment.Result);
         Assert.Equal(OverallAssessment.ImportedNoProvenance, resNoSignal.Assessment.Result);
-        Assert.Contains("Imported and registered by VisionX", resNoSignal.Assessment.Explanation);
+        Assert.Contains("NOT verified", resNoSignal.Assessment.Explanation);
+    }
+
+    [Fact]
+    public void PhoneOriginValidation_ShouldAcceptPhoneCameraExifAndRejectOutsideSources()
+    {
+        // 1. Valid phone camera photo (Make + Model + DateTimeOriginal)
+        using var phoneImg = new Image<Rgb24>(64, 64);
+        phoneImg.Metadata.ExifProfile = new SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifProfile();
+        phoneImg.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Make, "Google");
+        phoneImg.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Model, "Pixel 8 Pro");
+        phoneImg.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.DateTimeOriginal, "2026:11:26 01:30:00");
+        using var phoneMs = new MemoryStream();
+        phoneImg.Save(phoneMs, new JpegEncoder { Quality = 90 });
+
+        var (okPhone, _) = _forensics.ValidatePhoneCameraOrigin(phoneMs.ToArray(), "IMG_20261126.jpg", "image/jpeg");
+        Assert.True(okPhone);
+
+        // 2. Outside source: stripped EXIF (WhatsApp / downloaded / AI image)
+        var outsideBytes = CreateGradientJpeg(64, 64, 75);
+        var (okOutside, reasonOutside) = _forensics.ValidatePhoneCameraOrigin(outsideBytes, "IMG-20261126-WA0001.jpg", "image/jpeg");
+        Assert.False(okOutside);
+        Assert.Contains("outside source", reasonOutside, StringComparison.OrdinalIgnoreCase);
+
+        // 3. Outside source: Screenshot filename
+        var (okScreenshot, _) = _forensics.ValidatePhoneCameraOrigin(phoneMs.ToArray(), "Screenshot_20261126.png", "image/png");
+        Assert.False(okScreenshot);
     }
 
     // 6. ChatGPT image edited into an existing photograph

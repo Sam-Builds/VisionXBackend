@@ -19,6 +19,7 @@ public class MediaController : ControllerBase
     private readonly IC2paVerificationProvider _c2paProvider;
     private readonly ISynthIdDetectionProvider _synthIdProvider;
     private readonly IMediaFingerprintProvider _fingerprintProvider;
+    private readonly IImageForensicsProvider _forensicsProvider;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
@@ -27,6 +28,7 @@ public class MediaController : ControllerBase
         IC2paVerificationProvider c2paProvider,
         ISynthIdDetectionProvider synthIdProvider,
         IMediaFingerprintProvider fingerprintProvider,
+        IImageForensicsProvider forensicsProvider,
         ILogger<MediaController> logger)
     {
         _dbContext = dbContext;
@@ -34,6 +36,7 @@ public class MediaController : ControllerBase
         _c2paProvider = c2paProvider;
         _synthIdProvider = synthIdProvider;
         _fingerprintProvider = fingerprintProvider;
+        _forensicsProvider = forensicsProvider;
         _logger = logger;
     }
 
@@ -88,78 +91,55 @@ public class MediaController : ControllerBase
         C2paStatus c2paStatus;
         string responseMessage;
 
-        if (sourceType == SourceType.Camera)
+        if (sourceType == SourceType.Import)
         {
-            // Camera Capture Workflow: preserve original separately AND generate signed VisionX C2PA artifact
-            originalArtifactPath = await _storageService.StoreMediaAsync(
-                userId,
-                mediaItemId,
-                $"original_{fileName}",
-                new MemoryStream(rawBytes),
-                cancellationToken
-            );
-
-            var manifestResult = await _c2paProvider.CreateAndEmbedManifestAsync(
-                rawBytes,
-                fileName,
-                mimeType,
-                userId,
-                SourceType.Camera,
-                deviceModel,
-                location,
-                cancellationToken
-            );
-
-            signedSha256 = _storageService.ComputeSha256(new MemoryStream(manifestResult.EmbeddedMediaBytes));
-            storagePath = await _storageService.StoreMediaAsync(
-                userId,
-                mediaItemId,
-                fileName,
-                new MemoryStream(manifestResult.EmbeddedMediaBytes),
-                cancellationToken
-            );
-
-            manifestJson = manifestResult.ManifestJson;
-            manifestSignature = manifestResult.Signature;
-            issuer = manifestResult.Issuer;
-            c2paStatus = C2paStatus.VerifiedOriginal;
-            responseMessage = "Registered as captured through VisionX with C2PA Content Credentials.";
+            var (isPhoneOrigin, reason) = _forensicsProvider.ValidatePhoneCameraOrigin(rawBytes, fileName, mimeType);
+            if (!isPhoneOrigin)
+            {
+                return UnprocessableEntity(new
+                {
+                    code = "OUTSIDE_SOURCE_REJECTED",
+                    message = reason
+                });
+            }
         }
-        else
-        {
-            // Imported Media Workflow: NEVER issue a VisionX camera-capture or VisionX provenance claim.
-            // Preserve imported bytes as-is and inspect only existing credentials.
-            storagePath = await _storageService.StoreMediaAsync(
-                userId,
-                mediaItemId,
-                fileName,
-                new MemoryStream(rawBytes),
-                cancellationToken
-            );
 
-            var existingC2pa = await _c2paProvider.InspectDetailedProvenanceAsync(rawBytes, fileName, mimeType, cancellationToken);
-            manifestJson = existingC2pa.ManifestJson ?? string.Empty;
-            issuer = existingC2pa.SignerIdentity ?? "None";
+        // Preserve original bytes separately AND generate signed VisionX C2PA artifact
+        originalArtifactPath = await _storageService.StoreMediaAsync(
+            userId,
+            mediaItemId,
+            $"original_{fileName}",
+            new MemoryStream(rawBytes),
+            cancellationToken
+        );
 
-            if (!existingC2pa.ManifestPresent)
-            {
-                c2paStatus = C2paStatus.NoCredentials;
-            }
-            else if (!existingC2pa.StructureValid || (existingC2pa.SignerTrusted && !existingC2pa.HardBindingValid))
-            {
-                c2paStatus = C2paStatus.InvalidCredentials;
-            }
-            else if (!existingC2pa.SignerTrusted)
-            {
-                c2paStatus = C2paStatus.UntrustedSigner;
-            }
-            else
-            {
-                c2paStatus = C2paStatus.VerifiedProvenanceTransformed;
-            }
+        var manifestResult = await _c2paProvider.CreateAndEmbedManifestAsync(
+            rawBytes,
+            fileName,
+            mimeType,
+            userId,
+            SourceType.Camera,
+            deviceModel,
+            location,
+            cancellationToken
+        );
 
-            responseMessage = "Imported and registered by VisionX. Registration is not proof of how the media was originally created.";
-        }
+        signedSha256 = _storageService.ComputeSha256(new MemoryStream(manifestResult.EmbeddedMediaBytes));
+        storagePath = await _storageService.StoreMediaAsync(
+            userId,
+            mediaItemId,
+            fileName,
+            new MemoryStream(manifestResult.EmbeddedMediaBytes),
+            cancellationToken
+        );
+
+        manifestJson = manifestResult.ManifestJson;
+        manifestSignature = manifestResult.Signature;
+        issuer = manifestResult.Issuer;
+        c2paStatus = C2paStatus.VerifiedOriginal;
+        responseMessage = sourceType == SourceType.Camera
+            ? "Registered as captured through VisionX with C2PA Content Credentials."
+            : "Photo verified as taken on this phone. C2PA Content Credentials and cryptographic signature added.";
 
         var mediaItem = new MediaItem
         {

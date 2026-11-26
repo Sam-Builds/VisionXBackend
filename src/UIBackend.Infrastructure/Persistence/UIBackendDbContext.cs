@@ -20,6 +20,11 @@ public class UIBackendDbContext : DbContext, IUIBackendDbContext
     public DbSet<MediaMatch> MediaMatches => Set<MediaMatch>();
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<MediaAccessEvent> MediaAccessEvents => Set<MediaAccessEvent>();
+    public DbSet<MonitoredDevice> MonitoredDevices => Set<MonitoredDevice>();
+    public DbSet<MonitoringJob> MonitoringJobs => Set<MonitoringJob>();
+    public DbSet<DetectionRecord> DetectionRecords => Set<DetectionRecord>();
+    public DbSet<AlertRecord> AlertRecords => Set<AlertRecord>();
+    public DbSet<NotificationOutboxItem> NotificationOutboxItems => Set<NotificationOutboxItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -192,6 +197,99 @@ public class UIBackendDbContext : DbContext, IUIBackendDbContext
             entity.Property(e => e.UserAgent).HasMaxLength(512);
             entity.Property(e => e.Referer).HasMaxLength(1000);
             entity.Property(e => e.AccessingUserId).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<MonitoredDevice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OwnerUserId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAtUtc);
+
+            entity.Property(e => e.OwnerUserId).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.FeedUrl).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.MlWorkerId).HasMaxLength(128);
+            entity.Property(e => e.ActiveJobId).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<MonitoringJob>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.DeviceId);
+            entity.HasIndex(e => e.ExternalJobId);
+            entity.HasIndex(e => e.IdempotencyKey);
+
+            entity.Property(e => e.ExternalJobId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(128).IsRequired();
+
+            entity.HasOne(e => e.Device)
+                  .WithMany(d => d.Jobs)
+                  .HasForeignKey(e => e.DeviceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DetectionRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.EventId).IsUnique();
+            entity.HasIndex(e => e.DeviceId);
+            entity.HasIndex(e => e.OwnerUserId);
+            entity.HasIndex(e => e.CreatedAtUtc);
+
+            entity.Property(e => e.EventId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.OwnerUserId).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.JobId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.DetectionType).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.ModelName).HasMaxLength(128);
+            entity.Property(e => e.ModelVersion).HasMaxLength(64);
+
+            entity.HasOne(e => e.Device)
+                  .WithMany(d => d.Detections)
+                  .HasForeignKey(e => e.DeviceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlertRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OwnerUserId);
+            entity.HasIndex(e => e.DeviceId);
+            entity.HasIndex(e => e.Severity);
+            entity.HasIndex(e => e.IsRead);
+            entity.HasIndex(e => e.CreatedAtUtc);
+            entity.HasIndex(e => e.DeduplicationKey);
+
+            entity.Property(e => e.OwnerUserId).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.DeduplicationKey).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.NotificationId).HasMaxLength(128);
+
+            entity.HasOne(e => e.Device)
+                  .WithMany(d => d.Alerts)
+                  .HasForeignKey(e => e.DeviceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Detection)
+                  .WithMany()
+                  .HasForeignKey(e => e.DetectionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationOutboxItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.NextRetryAtUtc);
+            entity.HasIndex(e => e.EventId).IsUnique();
+
+            entity.Property(e => e.OwnerUserId).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.EventId).HasMaxLength(128).IsRequired();
+
+            entity.HasOne(e => e.Alert)
+                  .WithMany()
+                  .HasForeignKey(e => e.AlertId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

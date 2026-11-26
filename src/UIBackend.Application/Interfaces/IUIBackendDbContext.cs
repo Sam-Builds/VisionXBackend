@@ -15,6 +15,11 @@ public interface IUIBackendDbContext
     DbSet<MediaMatch> MediaMatches { get; }
     DbSet<ShareLink> ShareLinks { get; }
     DbSet<MediaAccessEvent> MediaAccessEvents { get; }
+    DbSet<MonitoredDevice> MonitoredDevices { get; }
+    DbSet<MonitoringJob> MonitoringJobs { get; }
+    DbSet<DetectionRecord> DetectionRecords { get; }
+    DbSet<AlertRecord> AlertRecords { get; }
+    DbSet<NotificationOutboxItem> NotificationOutboxItems { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

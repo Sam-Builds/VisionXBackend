@@ -23,9 +23,82 @@ public class ImageForensicsService : IImageForensicsProvider
         "photoshop", "gimp", "lightroom", "snapseed", "picsart", "canva", "pixelmator"
     };
 
+    private static readonly string[] OutsideSourceFileIndicators =
+    {
+        "whatsapp", "-wa", "wa00", "telegram", "screenshot", "screen_shot",
+        "download", "chatgpt", "dalle", "dall-e", "midjourney", "fb_img",
+        "instagram", "snapchat", "edited"
+    };
+
     public ImageForensicsService(ILogger<ImageForensicsService> logger)
     {
         _logger = logger;
+    }
+
+    public (bool IsPhoneOrigin, string Reason) ValidatePhoneCameraOrigin(
+        byte[] mediaBytes,
+        string fileName,
+        string mimeType)
+    {
+        var lowerName = (fileName ?? string.Empty).ToLowerInvariant();
+        if (OutsideSourceFileIndicators.Any(ind => lowerName.Contains(ind)))
+        {
+            return (false, "Cannot verify or add C2PA credentials: this file appears to come from an outside source (messaging app, screenshot, download, or AI tool), not directly from this phone's camera.");
+        }
+
+        if (mimeType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, "Video accepted for device upload.");
+        }
+
+        try
+        {
+            var info = Image.Identify(mediaBytes);
+            var exif = info?.Metadata.ExifProfile;
+            if (exif == null || exif.Values.Count == 0)
+            {
+                return (false, "Cannot verify or add C2PA credentials: missing phone camera metadata (EXIF). Images from WhatsApp, downloads, screenshots, or AI generators cannot be signed.");
+            }
+
+            var make = exif.Values.FirstOrDefault(v => v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Make)?.GetValue()?.ToString();
+            var model = exif.Values.FirstOrDefault(v => v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Model)?.GetValue()?.ToString();
+            var software = exif.Values.FirstOrDefault(v => v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Software)?.GetValue()?.ToString()?.ToLowerInvariant() ?? string.Empty;
+
+            if (AiSoftwareIndicators.Any(ind => software.Contains(ind)) || EditingSoftwareIndicators.Any(ind => software.Contains(ind)))
+            {
+                return (false, $"Cannot verify or add C2PA credentials: metadata indicates external software ('{software}') rather than an unmodified phone camera photo.");
+            }
+
+            if (string.IsNullOrWhiteSpace(make) || string.IsNullOrWhiteSpace(model))
+            {
+                return (false, "Cannot verify or add C2PA credentials: phone camera Make/Model metadata is missing, indicating an outside source.");
+            }
+
+            bool hasCaptureTag = exif.Values.Any(v =>
+                v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.DateTimeOriginal ||
+                v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.ExposureTime ||
+                v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.FNumber ||
+                v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.ISOSpeedRatings ||
+                v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.FocalLength);
+
+            if (!hasCaptureTag)
+            {
+                return (false, "Cannot verify or add C2PA credentials: camera capture settings are missing, indicating this image was not taken directly by the phone's camera.");
+            }
+
+            var headerSliceLen = Math.Min(mediaBytes.Length, 65536);
+            var headerText = Encoding.Latin1.GetString(mediaBytes, 0, headerSliceLen).ToLowerInvariant();
+            if (AiSoftwareIndicators.Any(ind => headerText.Contains(ind)))
+            {
+                return (false, "Cannot verify or add C2PA credentials: embedded metadata indicates AI-generated media from an outside source.");
+            }
+
+            return (true, $"Verified phone camera metadata ({make.Trim()} {model.Trim()}).");
+        }
+        catch
+        {
+            return (false, "Cannot verify or add C2PA credentials: could not read valid phone camera metadata from this image.");
+        }
     }
 
     public Task<ForensicAnalysisResult> AnalyzeAsync(

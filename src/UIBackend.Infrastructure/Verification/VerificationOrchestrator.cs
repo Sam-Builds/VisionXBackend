@@ -312,24 +312,24 @@ public class VerificationOrchestrator : IVerificationOrchestrator
 
         if (aiPositive)
         {
-            keyFindings.Add("One or more AI-origin or AI-watermark signals were detected.");
+            keyFindings.Add("AI-generation or AI-watermark signals were detected.");
             if (provenance.ManifestPresent && provenance.SignatureValid)
             {
-                keyFindings.Add("Valid provenance metadata was present alongside AI signals.");
+                keyFindings.Add("Provenance metadata is present alongside AI signals.");
                 return new AssessmentSummaryDto(
                     OverallAssessment.ProvenanceVerifiedAiDetected,
-                    "AI signal detected",
+                    "Not Verified (AI)",
                     "danger",
-                    "Provenance metadata exists, and a supported AI watermark or AI-origin signal was detected. This media must not be treated as an authentic camera photograph.",
+                    "This image is NOT verified as a real photograph. AI-generated content signals were detected — do not take this image as authentic.",
                     keyFindings
                 );
             }
 
             return new AssessmentSummaryDto(
                 OverallAssessment.AiGenerationSuspected,
-                "AI signal suspected",
-                "warning",
-                "An AI-origin signal or watermark was detected, without verified camera provenance.",
+                "Not Verified (AI)",
+                "danger",
+                "This image is NOT verified. AI-generation signals were detected — do not treat this image as a genuine photograph.",
                 keyFindings
             );
         }
@@ -339,9 +339,9 @@ public class VerificationOrchestrator : IVerificationOrchestrator
             keyFindings.Add("Embedded C2PA credentials are invalid or the cryptographic hard-binding does not match the file bytes.");
             return new AssessmentSummaryDto(
                 OverallAssessment.InvalidOrContradictory,
-                "Verification failed",
+                "Not Verified",
                 "danger",
-                "The C2PA credentials are invalid or the asset binding is broken, indicating the file was altered after signing.",
+                "This image is NOT verified. Its cryptographic credentials are invalid or broken, meaning the file was altered after signing.",
                 keyFindings
             );
         }
@@ -352,9 +352,9 @@ public class VerificationOrchestrator : IVerificationOrchestrator
             keyFindings.Add("No contradictory AI or localized forensic manipulation signals detected.");
             return new AssessmentSummaryDto(
                 OverallAssessment.OriginalCaptureVerified,
-                "High assurance",
+                "Verified",
                 "success",
-                "Registered as captured through VisionX with intact cryptographic file integrity. Note: this verifies the capture record and file integrity, not the real-world truthfulness of the depicted scene.",
+                "Verified original VisionX capture with intact cryptographic file integrity.",
                 keyFindings
             );
         }
@@ -363,38 +363,38 @@ public class VerificationOrchestrator : IVerificationOrchestrator
         {
             if (exactMatchItem != null && exactMatchItem.SourceType == SourceType.Import)
             {
-                keyFindings.Add("File matches an entry previously imported and registered by VisionX (not a camera capture).");
+                keyFindings.Add("This file was imported without valid camera capture proof.");
                 if (forensics.Status == EvidenceStatus.Positive)
                 {
                     keyFindings.AddRange(forensics.Findings);
                     return new AssessmentSummaryDto(
                         OverallAssessment.ManipulationSuspected,
-                        "Forensic anomalies",
-                        "warning",
-                        "Imported and registered by VisionX. Forensic indicators detected localized anomalies; origin could not be established.",
+                        "Not Verified",
+                        "danger",
+                        "This image is NOT verified. Forensic checks found suspicious anomalies and no trusted camera origin exists.",
                         keyFindings
                     );
                 }
 
                 return new AssessmentSummaryDto(
                     OverallAssessment.ImportedNoProvenance,
-                    "Unverified origin",
-                    "neutral",
-                    "Imported and registered by VisionX. Registration is a record of import, not proof of how the media was originally created.",
+                    "Not Verified",
+                    "danger",
+                    "This image is NOT verified. No trusted origin or camera capture proof was found — do not treat it as an authentic photograph.",
                     keyFindings
                 );
             }
 
-            keyFindings.Add("Related to a previously registered VisionX image, but exact byte integrity has not been established (e.g. due to compression or resizing).");
+            keyFindings.Add("This file resembles a previously registered image, but was modified or compressed (e.g. via WhatsApp).");
             if (matches.Any(m => m.IsAmbiguous))
             {
                 keyFindings.Add("Multiple potential visual matches found; manual side-by-side comparison is recommended.");
             }
             return new AssessmentSummaryDto(
                 OverallAssessment.ProvenanceVerifiedModified,
-                "Modified",
+                "Not Verified (Modified)",
                 "warning",
-                "Related to a previously registered image. Exact integrity has not been established.",
+                "This exact file is NOT verified as original. It matches a registered image, but has been modified or recompressed.",
                 keyFindings
             );
         }
@@ -404,9 +404,9 @@ public class VerificationOrchestrator : IVerificationOrchestrator
             keyFindings.AddRange(forensics.Findings);
             return new AssessmentSummaryDto(
                 OverallAssessment.ManipulationSuspected,
-                "Forensic anomalies",
-                "warning",
-                "Forensic analysis detected localized region or metadata anomalies. These are supporting indicators, not conclusive proof of tampering.",
+                "Not Verified (Edited)",
+                "danger",
+                "This image is NOT verified. Forensic analysis detected suspicious regions or metadata anomalies — do not rely on it as unaltered.",
                 keyFindings
             );
         }
@@ -416,19 +416,19 @@ public class VerificationOrchestrator : IVerificationOrchestrator
             keyFindings.Add($"External C2PA manifest found (Signer: {provenance.SignerIdentity ?? "Unknown"}), outside VisionX trust list.");
             return new AssessmentSummaryDto(
                 OverallAssessment.Inconclusive,
-                "Inconclusive",
+                "Not Verified",
                 "warning",
-                "External C2PA credentials were found from an untrusted or external signer. Provenance cannot be verified under VisionX trust policy.",
+                "This image is NOT verified. It comes from an untrusted or external signer — do not assume it is authentic.",
                 keyFindings
             );
         }
 
-        keyFindings.Add("No C2PA credentials, registered VisionX match, or positive AI-watermark signals were found.");
+        keyFindings.Add("No C2PA credentials, registered VisionX match, or trusted camera origin found.");
         return new AssessmentSummaryDto(
             OverallAssessment.ImportedNoProvenance,
-            "Unverified origin",
-            "neutral",
-            "No reliable provenance evidence was found. Absence of credentials or AI signals does not prove the image is genuine or fake.",
+            "Not Verified",
+            "danger",
+            "This image is NOT verified. No trusted origin or camera capture proof was found — do not take this image seriously as an authentic photograph.",
             keyFindings
         );
     }

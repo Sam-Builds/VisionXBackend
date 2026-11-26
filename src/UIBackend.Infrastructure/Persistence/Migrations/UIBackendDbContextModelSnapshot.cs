@@ -75,6 +75,84 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.ToTable("AiDetectionChecks");
                 });
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.AlertRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeduplicationKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DetectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastOccurrenceAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NotificationId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("NotificationStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OccurrenceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("DeduplicationKey");
+
+                    b.HasIndex("DetectionId");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("IsRead");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("Severity");
+
+                    b.ToTable("AlertRecords");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.CaptureRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -156,6 +234,83 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("CaptureRecords");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.DetectionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("AnomalyScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DetectionType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ModelVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SnapshotReference")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StructuredMetadataJson")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("DetectionRecords");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ForensicCheck", b =>
@@ -382,6 +537,188 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.HasIndex("VerificationRunId");
 
                     b.ToTable("MediaMatches");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MonitoredDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActiveJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("ConfigurationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedStreamCredentials")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeedUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSuccessfulInferenceAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MlWorkerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("MonitoringEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("MonitoredDevices");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MonitoringJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("ExternalJobId");
+
+                    b.HasIndex("IdempotencyKey");
+
+                    b.ToTable("MonitoringJobs");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.NotificationOutboxItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AlertId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastResponseBody")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("LastResponseCode")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("NextRetryAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("SimulateTransientFailureOnce")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlertId");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("NextRetryAtUtc");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("NotificationOutboxItems");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ProvenanceCheck", b =>
@@ -665,6 +1002,25 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("VerificationRun");
                 });
 
+            modelBuilder.Entity("UIBackend.Domain.Entities.AlertRecord", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.DetectionRecord", "Detection")
+                        .WithMany()
+                        .HasForeignKey("DetectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("UIBackend.Domain.Entities.MonitoredDevice", "Device")
+                        .WithMany("Alerts")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Detection");
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("UIBackend.Domain.Entities.CaptureRecord", b =>
                 {
                     b.HasOne("UIBackend.Domain.Entities.MediaItem", "MediaItem")
@@ -674,6 +1030,17 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MediaItem");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.DetectionRecord", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.MonitoredDevice", "Device")
+                        .WithMany("Detections")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ForensicCheck", b =>
@@ -721,6 +1088,28 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("MatchedMediaItem");
 
                     b.Navigation("VerificationRun");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MonitoringJob", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.MonitoredDevice", "Device")
+                        .WithMany("Jobs")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.NotificationOutboxItem", b =>
+                {
+                    b.HasOne("UIBackend.Domain.Entities.AlertRecord", "Alert")
+                        .WithMany()
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Alert");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.ProvenanceCheck", b =>
@@ -774,6 +1163,15 @@ namespace UIBackend.Infrastructure.Persistence.Migrations
                     b.Navigation("ShareLinks");
 
                     b.Navigation("VerificationRecords");
+                });
+
+            modelBuilder.Entity("UIBackend.Domain.Entities.MonitoredDevice", b =>
+                {
+                    b.Navigation("Alerts");
+
+                    b.Navigation("Detections");
+
+                    b.Navigation("Jobs");
                 });
 
             modelBuilder.Entity("UIBackend.Domain.Entities.VerificationRun", b =>

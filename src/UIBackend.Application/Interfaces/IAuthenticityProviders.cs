@@ -81,6 +81,12 @@ public interface IImageForensicsProvider
         string mimeType,
         CancellationToken cancellationToken = default
     );
+
+    (bool IsPhoneOrigin, string Reason) ValidatePhoneCameraOrigin(
+        byte[] mediaBytes,
+        string fileName,
+        string mimeType
+    );
 }
 
 public interface IMediaFingerprintProvider

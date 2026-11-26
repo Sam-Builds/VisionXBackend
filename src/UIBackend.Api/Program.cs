@@ -10,6 +10,7 @@ using UIBackend.Infrastructure.AiDetection;
 using UIBackend.Infrastructure.C2pa;
 using UIBackend.Infrastructure.Fingerprinting;
 using UIBackend.Infrastructure.Forensics;
+using UIBackend.Infrastructure.Monitoring;
 using UIBackend.Infrastructure.Notifications;
 using UIBackend.Infrastructure.Persistence;
 using UIBackend.Infrastructure.Storage;
@@ -40,6 +41,7 @@ builder.Services.AddHttpClient("JwksClient");
 builder.Services.AddHttpClient("NotificationsClient");
 builder.Services.AddHttpClient("SynthIdClient");
 builder.Services.AddHttpClient("OpenAiClient");
+builder.Services.AddHttpClient("MlServiceClient");
 
 // Security & Key Providers
 builder.Services.AddSingleton<JwksKeyProvider>();
@@ -121,6 +123,12 @@ builder.Services.AddSingleton<IAiDetectionProvider, OpenAiContentProvenanceProvi
 builder.Services.AddSingleton<IAiDetectionProvider, SynthIdAiDetectionProvider>();
 builder.Services.AddScoped<IVerificationOrchestrator, VerificationOrchestrator>();
 builder.Services.AddScoped<INotificationServiceClient, VisionXNotificationClient>();
+builder.Services.AddSingleton<IFeedUrlValidator, FeedUrlValidator>();
+builder.Services.AddSingleton<IStreamCredentialProtector, StreamCredentialProtector>();
+builder.Services.AddScoped<IMlServiceClient, MlServiceClient>();
+builder.Services.AddScoped<INotificationOutboxService, NotificationOutboxService>();
+builder.Services.AddScoped<IAlertClassificationService, AlertClassificationService>();
+builder.Services.AddHostedService<NotificationOutboxWorker>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
