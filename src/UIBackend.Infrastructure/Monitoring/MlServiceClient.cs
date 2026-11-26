@@ -156,6 +156,10 @@ public class MlServiceClient : IMlServiceClient
             cts.CancelAfter(TimeSpan.FromSeconds(6));
 
             var response = await client.GetAsync($"{BaseUrl}/v1/devices/{deviceId}/status", cts.Token);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new MlStatusResult(true, DeviceStatus.Stopped, null, null, null);
+            }
             if (!response.IsSuccessStatusCode)
             {
                 return new MlStatusResult(true, DeviceStatus.Error, null, null, $"ML status returned HTTP {(int)response.StatusCode}.");
@@ -191,6 +195,10 @@ public class MlServiceClient : IMlServiceClient
     private HttpClient CreateClient()
     {
         var client = _httpClientFactory.CreateClient("MlServiceClient");
+        if (!client.DefaultRequestHeaders.UserAgent.Any())
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("VisionX-Backend/1.0");
+        }
         if (!string.IsNullOrWhiteSpace(ServiceApiKey))
         {
             client.DefaultRequestHeaders.Remove("X-ML-Service-Key");
